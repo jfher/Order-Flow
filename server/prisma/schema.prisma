@@ -1,0 +1,316 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+// ============================================
+// 🧱 CONFIG
+// ============================================
+
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// 🧠 ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  SELLER
+  DRIVER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentType {
+  CASH
+  TRANSFER
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+// ============================================
+// 👤 USER (interno)
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  sessions   Session[]
+  orders     Order[]
+  deliveries Delivery[] @relation("DriverDeliveries")
+
+  createdRestocks Restock[] @relation("RestockCreatedBy")
+
+  createdProducts Product[] @relation("ProductCreatedBy")
+  updatedProducts Product[] @relation("ProductUpdatedBy")
+
+  auditLogs AuditLog[] @relation("AuditLogByUser")
+
+  @@index([email])
+}
+
+// ============================================
+// 🔐 SESSION
+// ============================================
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ============================================
+// 👥 CLIENT (externo)
+// ============================================
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  address   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  updatedById String?
+
+  orders     Order[]
+  deliveries Delivery[]
+
+  @@index([phone])
+  @@index([name])
+}
+
+// ============================================
+// 📦 PRODUCT
+// ============================================
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  stock       Int
+  category    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  updatedById String?
+
+  createdBy User? @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  updatedBy User? @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
+
+  orderItems   OrderItem[]
+  restockItems RestockItem[]
+
+  @@index([name])
+  @@index([category])
+}
+
+// ============================================
+// 🛒 ORDER
+// ============================================
+
+model Order {
+  id        String      @id @default(uuid())
+  userId    String
+  clientId  String
+  status    OrderStatus @default(PENDING)
+  total     Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  createdById String?
+  updatedById String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  client Client @relation(fields: [clientId], references: [id])
+
+  items    OrderItem[]
+  payment  Payment?
+  delivery Delivery?
+
+  @@index([userId])
+  @@index([clientId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================
+// 🧾 ORDER ITEM
+// ============================================
+
+model OrderItem {
+  id        String @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float
+
+  createdAt DateTime @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@unique([orderId, productId])
+}
+
+// ============================================
+// 💳 PAYMENT
+// ============================================
+
+model Payment {
+  id        String        @id @default(uuid())
+  orderId   String @unique
+  type      PaymentType
+  status    PaymentStatus @default(PENDING)
+  amount    Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([status])
+}
+
+// ============================================
+// 🚚 DELIVERY
+// ============================================
+
+model Delivery {
+  id          String         @id @default(uuid())
+  orderId     String @unique
+  clientId    String
+  driverId    String
+  status      DeliveryStatus @default(ASSIGNED)
+  address     String
+  deliveredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  updatedById String?
+
+  order  Order  @relation(fields: [orderId], references: [id])
+  client Client @relation(fields: [clientId], references: [id])
+  driver User   @relation("DriverDeliveries", fields: [driverId], references: [id])
+
+  @@index([driverId])
+  @@index([clientId])
+  @@index([status])
+}
+
+// ============================================
+// 📥 RESTOCK
+// ============================================
+
+model Restock {
+  id     String @id @default(uuid())
+  userId String
+  note   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User         @relation("RestockCreatedBy", fields: [userId], references: [id])
+  items RestockItem[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// 📦 RESTOCK ITEM
+// ============================================
+
+model RestockItem {
+  id        String @id @default(uuid())
+  restockId String
+  productId String
+  quantity  Int
+
+  createdAt DateTime @default(now())
+
+  restock Restock @relation(fields: [restockId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([restockId])
+  @@index([productId])
+  @@unique([restockId, productId])
+}
+
+// ============================================
+// 🧾 AUDIT LOG (PRO)
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation("AuditLogByUser", fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+}
