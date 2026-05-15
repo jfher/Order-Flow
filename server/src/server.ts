@@ -10,7 +10,7 @@ dotenv.config();
 const PORT = process.env.PORT || 3001;
 const rootPath = process.env.ROOT_PATH;
 
-const app = express();
+export const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
